@@ -132,7 +132,13 @@ def report_finale():
     st.title("📈 Risultato Case Assessment")
 
     risposte = st.session_state.risposte
-    punteggi = [r + 1 for r in risposte]
+    punteggi = []
+    for i, r in enumerate(risposte):
+        if i == 10 and r in [2, 3, 4, 5]:  # Domanda 11, opzioni 3-6
+            punteggi.append(3)
+        else:
+            punteggi.append(r + 1)
+
 
     somma = sum(punteggi)
     max_score = len(risposte) * 3
