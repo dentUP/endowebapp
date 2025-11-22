@@ -1,7 +1,12 @@
 import streamlit as st
 import os
 import pandas as pd
+from datetime import datetime
 from domande import DOMANDE
+from dati import DATI_PRE_OPERATORI, DATI_INTRA_OPERATORI, DATI_POST_OPERATORI
+from storico_pazienti import storico_pazienti
+from report_generale import report_generale
+
 
 st.set_page_config(page_title="EndoWebApp", page_icon="🦷", layout="wide")
 
@@ -182,6 +187,339 @@ def report_finale():
             st.markdown(f"{emoji} **Suggerimento:** {suggerimenti[r]}")
         st.markdown("---")
 
+def area_personale():
+    with open("logo.png", "rb") as f:
+        st.image(f.read(), width=100)
+
+    st.title("👤 Area Personale")
+    scelta = st.radio("Scegli una sezione:", ["📋 Nuovo Paziente", "📁 Storico Pazienti", "📊 Report Generale"])
+
+    if scelta == "📋 Nuovo Paziente":
+        nuovo_paziente()
+    elif scelta == "📁 Storico Pazienti":
+        storico_pazienti()
+    elif scelta == "📊 Report Generale":
+        report_generale()
+
+    if st.button("⬅️ Torna alla Home"):
+        st.session_state.page = "home"
+        st.rerun()
+
+def nuovo_paziente():
+    st.image("logo.png", width=100)
+    st.title("📋 Inserimento Nuovo Paziente")
+
+    with st.form(key="form_paziente"):
+        # 🟩 Dati Pre-Operatori
+        with st.expander("🟩 Dati Pre-Operatori", expanded=True):
+            for voce in DATI_PRE_OPERATORI:
+                chiave = voce["chiave"]
+                label = voce["etichetta"]
+                tipo = voce["tipo"]
+                opzioni = voce.get("opzioni", [])
+
+                if tipo == "data":
+                    st.date_input(label, key=chiave)
+                elif tipo == "testo":
+                    st.text_input(label, key=chiave)
+                elif tipo == "select":
+                    st.selectbox(label, options=opzioni, key=chiave)
+                elif tipo == "multiselect":
+                    st.multiselect(label, options=opzioni, key=chiave)
+                elif tipo == "slider":
+                    min_val = voce.get("min", 0)
+                    max_val = voce.get("max", 100)
+                    st.slider(label, min_val, max_val, key=chiave)
+
+        # 🟦 Dati Intra-Operatori
+        with st.expander("🟦 Dati Intra-Operatori", expanded=False):
+            for voce in DATI_INTRA_OPERATORI:
+                chiave = voce["chiave"]
+                label = voce["etichetta"]
+                tipo = voce["tipo"]
+                opzioni = voce.get("opzioni", [])
+
+                if tipo == "testo":
+                    st.text_input(label, key=chiave)
+                elif tipo == "select":
+                    st.selectbox(label, options=opzioni, key=chiave)
+                elif tipo == "multiselect":
+                    st.multiselect(label, options=opzioni, key=chiave)
+                elif tipo == "numero":
+                    st.number_input(label, min_value=0, step=1, key=chiave)
+
+        # 🟥 Dati Post-Operatori
+        with st.expander("🟥 Dati Post-Operatori", expanded=False):
+            for voce in DATI_POST_OPERATORI:
+                chiave = voce["chiave"]
+                label = voce["etichetta"]
+                tipo = voce["tipo"]
+                opzioni = voce.get("opzioni", [])
+
+                if tipo == "testo":
+                    st.text_input(label, key=chiave)
+                elif tipo == "select":
+                    st.selectbox(label, options=opzioni, key=chiave)
+                elif tipo == "multiselect":
+                    st.multiselect(label, options=opzioni, key=chiave)
+                elif tipo == "numero":
+                    st.number_input(label, min_value=0, step=1, key=chiave)
+
+        submitted = st.form_submit_button("💾 Salva paziente")
+        if submitted:
+            # Estrai i dati inseriti
+            dati_paziente = {"username": st.session_state.username}
+            for lista in [DATI_PRE_OPERATORI, DATI_INTRA_OPERATORI, DATI_POST_OPERATORI]:
+                for voce in lista:
+                    chiave = voce["chiave"]
+                    valore = st.session_state.get(chiave)
+                    # Se è lista (es. multiselect), uniscila in stringa
+                    if isinstance(valore, list):
+                     valore = ", ".join(map(str, valore))
+                dati_paziente[chiave] = valore
+
+
+            # Identificatore univoco del paziente
+            chiave_id = f"{dati_paziente.get('nome', '')}_{dati_paziente.get('cognome', '')}".strip().lower().replace(" ", "")
+            if not chiave_id:
+                st.error("⚠️ Inserisci nome e cognome del paziente per salvare i dati.")
+                return
+
+            # Nome del file CSV personale
+            file_csv = f"dati_{st.session_state.username}.csv"
+
+            # Carica dati esistenti
+            if os.path.exists(file_csv):
+                df = pd.read_csv(file_csv)
+            else:
+                df = pd.DataFrame()
+
+            # Rimuovi righe con lo stesso ID paziente se già presenti
+            df["chiave_id"] = df["nome"].astype(str).str.lower().str.replace(" ", "") + "_" + df["cognome"].astype(str).str.lower().str.replace(" ", "")
+            df = df[df["chiave_id"] != chiave_id]
+            df = df.drop(columns="chiave_id", errors="ignore")
+
+
+            # Aggiungi la nuova riga
+            df = pd.concat([df, pd.DataFrame([dati_paziente])], ignore_index=True)
+
+            # Salva nel file CSV
+            df.to_csv(file_csv, index=False)
+            st.success("✅ Dati salvati con successo.")
+
+# Funzione: profilo_paziente()
+def profilo_paziente():
+    st.image("logo.png", width=100)
+    st.title("📝 Profilo Paziente")
+
+    with st.form(key="form_modifica"):
+        with st.expander("🟩 Dati Pre-Operatori", expanded=True):
+            for voce in DATI_PRE_OPERATORI:
+                chiave = voce["chiave"]
+                tipo = voce["tipo"]
+                label = voce["etichetta"]
+                opzioni = voce.get("opzioni", [])
+
+                valore = st.session_state.get(chiave, "")
+
+                if tipo == "data":
+                    st.date_input(label, value=valore, key=chiave)
+                elif tipo == "testo":
+                    st.text_input(label, value=valore, key=chiave)
+                elif tipo == "select":
+                    st.selectbox(label, options=opzioni, index=opzioni.index(valore) if valore in opzioni else 0, key=chiave)
+                elif tipo == "multiselect":
+                    st.multiselect(label, options=opzioni, default=valore, key=chiave)
+                elif tipo == "slider":
+                    min_val = voce.get("min", 0)
+                    max_val = voce.get("max", 100)
+                    st.slider(label, min_val, max_val, value=valore, key=chiave)
+
+        with st.expander("🟦 Dati Intra-Operatori", expanded=False):
+            for voce in DATI_INTRA_OPERATORI:
+                chiave = voce["chiave"]
+                tipo = voce["tipo"]
+                label = voce["etichetta"]
+                opzioni = voce.get("opzioni", [])
+
+                valore = st.session_state.get(chiave, "")
+
+                if tipo == "testo":
+                    st.text_input(label, value=valore, key=chiave)
+                elif tipo == "select":
+                    st.selectbox(label, options=opzioni, index=opzioni.index(valore) if valore in opzioni else 0, key=chiave)
+                elif tipo == "multiselect":
+                    st.multiselect(label, options=opzioni, default=valore, key=chiave)
+                elif tipo == "numero":
+                    st.number_input(label, min_value=0, step=1, value=valore, key=chiave)
+
+        with st.expander("🟥 Dati Post-Operatori", expanded=False):
+            for voce in DATI_POST_OPERATORI:
+                chiave = voce["chiave"]
+                tipo = voce["tipo"]
+                label = voce["etichetta"]
+                opzioni = voce.get("opzioni", [])
+
+                valore = st.session_state.get(chiave, "")
+
+                if tipo == "testo":
+                    st.text_input(label, value=valore, key=chiave)
+                elif tipo == "select":
+                    st.selectbox(label, options=opzioni, index=opzioni.index(valore) if valore in opzioni else 0, key=chiave)
+                elif tipo == "multiselect":
+                    st.multiselect(label, options=opzioni, default=valore, key=chiave)
+                elif tipo == "numero":
+                    st.number_input(label, min_value=0, step=1, value=valore, key=chiave)
+
+        if st.form_submit_button("💾 Salva modifiche"):
+            dati_paziente = {"username": st.session_state.username}
+            for lista in [DATI_PRE_OPERATORI, DATI_INTRA_OPERATORI, DATI_POST_OPERATORI]:
+                for voce in lista:
+                    chiave = voce["chiave"]
+                    dati_paziente[chiave] = st.session_state.get(chiave)
+
+            file_csv = f"dati_{st.session_state.username}.csv"
+            df = pd.read_csv(file_csv)
+            index = st.session_state.get("paziente_index", None)
+            if index is not None:
+                df.loc[index] = dati_paziente
+                df.to_csv(file_csv, index=False)
+                st.success("✅ Modifiche salvate correttamente.")
+                st.session_state.page = "storico"
+                st.rerun()
+
+def profilo_paziente():
+    st.image("logo.png", width=100)
+    st.title("👤 Modifica dati paziente")
+
+    # Crea il form per la modifica dei dati
+    with st.form("form_modifica_paziente"):
+        dati_paziente = {"username": st.session_state.username}
+
+        # Mostra tutti i campi suddivisi in pre-, intra- e post-operatori
+        for lista in [DATI_PRE_OPERATORI, DATI_INTRA_OPERATORI, DATI_POST_OPERATORI]:
+            for voce in lista:
+                chiave = voce["chiave"]
+                testo = voce["testo"]
+                opzioni = voce["opzioni"]
+                valore_corrente = st.session_state.get(chiave, opzioni[0])
+                dati_paziente[chiave] = st.selectbox(testo, opzioni, index=opzioni.index(valore_corrente), key=chiave)
+
+        submitted = st.form_submit_button("💾 Salva modifiche")
+
+        # Pulsante per tornare indietro
+    if st.button("🔙 Torna allo storico"):
+        st.session_state.page = "storico"
+        st.rerun()
+
+    if submitted:
+        # Recupera il file CSV
+        file_csv = f"dati_{st.session_state.username}.csv"
+        if os.path.exists(file_csv):
+            df = pd.read_csv(file_csv)
+        else:
+            st.error("❌ File dati non trovato.")
+            return
+
+        # Sostituisci la riga esistente all'indice salvato
+        index = st.session_state.get("paziente_index")
+        if index is not None and index < len(df):
+            for chiave, valore in dati_paziente.items():
+                df.at[index, chiave] = valore
+            df.to_csv(file_csv, index=False)
+            st.success("✅ Modifiche salvate con successo.")
+            st.session_state.page = "storico"
+            st.session_state.modifica_paziente = False
+            st.rerun()
+        else:
+            st.error("❌ Impossibile trovare il paziente da modificare.")
+
+
+def report_generale():
+    st.title("📊 Report Generale")
+    username = st.session_state.username
+    file_csv = f"dati_{username}.csv"
+
+    try:
+        df = pd.read_csv(file_csv)
+        st.success(f"Sono stati caricati {len(df)} casi per l'utente {username}.")
+    except FileNotFoundError:
+        st.error("Nessun dato trovato. Inserisci almeno un paziente per generare un report.")
+        return
+
+    def genera_grafico(colonna, etichetta):
+        if colonna not in df.columns:
+            st.warning(f"Colonna '{colonna}' non trovata.")
+            return
+
+        serie = df[colonna].dropna()
+
+        # Per i campi multirisposta separati da punto e virgola
+        if serie.str.contains(";").any():
+            tutte = serie.str.split(";").explode()
+            conteggio = tutte.value_counts()
+        else:
+            conteggio = serie.value_counts()
+
+        if conteggio.empty:
+            st.info(f"Nessun dato disponibile per '{etichetta}'.")
+            return
+
+        st.subheader(etichetta)
+        fig, ax = plt.subplots()
+        if len(conteggio) <= 6:
+            ax.pie(conteggio, labels=conteggio.index, autopct="%1.1f%%", startangle=90)
+            ax.axis("equal")
+        else:
+            ax.bar(conteggio.index, conteggio.values)
+            ax.set_ylabel("Frequenza")
+            ax.set_xticklabels(conteggio.index, rotation=45, ha="right")
+        st.pyplot(fig)
+
+    # 🟩 PRE-OPERATORI
+    with st.expander("🟩 Dati Pre-Operatori"):
+        for campo in DATI_PRE_OPERATORI:
+            if campo["tipo"] in ["select", "multiselect"]:
+                genera_grafico(campo["chiave"], campo["etichetta"])
+
+    # 🟦 INTRA-OPERATORI
+    with st.expander("🟦 Dati Intra-Operatori"):
+        for campo in DATI_INTRA_OPERATORI:
+            if campo["tipo"] in ["select", "multiselect"]:
+                genera_grafico(campo["chiave"], campo["etichetta"])
+
+    # 🟥 POST-OPERATORI
+    with st.expander("🟥 Dati Post-Operatori"):
+        for campo in DATI_POST_OPERATORI:
+            if campo["tipo"] in ["select", "multiselect"]:
+                genera_grafico(campo["chiave"], campo["etichetta"])
+
+    if st.button("⬅️ Torna all'Area Personale"):
+        st.session_state.page = "area_personale"
+        st.rerun()
+
+
+# 🔁 Modifica finale nell’area_personale()
+def area_personale():
+    with open("logo.png", "rb") as f:
+        st.image(f.read(), width=100)
+
+    st.title("👤 Area Personale")
+    scelta = st.radio("Scegli una sezione:", ["📋 Nuovo Paziente", "📁 Storico Pazienti", "📊 Report Generale"])
+
+    if scelta == "📋 Nuovo Paziente":
+        nuovo_paziente()
+    elif scelta == "📁 Storico Pazienti":
+        storico_pazienti()
+    elif scelta == "📊 Report Generale":
+        report_generale()
+
+    if st.button("⬅️ Torna alla Home"):
+        st.session_state.page = "home"
+        st.rerun()
+
+
+
 # Inizializzazione dello stato
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -189,16 +527,22 @@ if "page" not in st.session_state:
     st.session_state.page = "home"
 
 # Logica principale
+# Logica principale
 if not st.session_state.logged_in:
     login()
 else:
     if st.session_state.page == "profilo":
-        st.header("👤 Profilo personale")
-        st.info("Qui vedrai il report dei tuoi trattamenti endodontici (in arrivo).")
+        area_personale()
     elif st.session_state.page == "assessment":
         case_assessment()
     elif st.session_state.page == "report":
         report_finale()
+    elif st.session_state.page == "storico":
+        storico_pazienti()
+    elif st.session_state.page == "modifica":
+        profilo_paziente()
     else:
         homepage()
+
+
 
